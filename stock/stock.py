@@ -1,10 +1,20 @@
 import pymongo
-import bottle
+import flask
 import cgi
 import re
 import json
 import datetime
 #import stdnum
+
+app = flask.Flask(__name__)
+
+@app.errorhandler(404)
+def not_found(error):
+    return flask.make_response(flask.jsonify({"error":str(error)}), 404)
+
+@app.errorhandler(400)
+def not_found(error):
+    return flask.make_response(flask.jsonify({"error":str(error)}), 400)
 
 BASE_URL = '/stock/<psav>'
 
@@ -64,13 +74,12 @@ assert not controleEtat('PP')
 assert controleImei('329463363608757')
 #assert not controleImei('329463363608758')
 
-@bottle.get(BASE_URL)
+
+@app.route(BASE_URL, methods=['GET'])
 def getStock(psav):
-    gencod = bottle.request.query.get("gencod")
-    etat = bottle.request.query.get("etat")
-    thetype = bottle.request.query.get("type")
-    bi = bottle.request.query.get("bi")
-    tout = bottle.request.query.get("all")
+    gencod = flask.request.args.get("gencod")
+    etat = flask.request.args.get("etat")
+    tout = flask.request.args.get("all")
     searchTerm = {"psav":psav}
     if gencod != None:
         searchTerm["gencod"] = gencod
@@ -86,33 +95,32 @@ def getStock(psav):
         del item["_id"]
         reponse.append(item)
     debug(str(len(reponse)) + " trouvés")
-    return json.dumps(reponse)
+    return flask.jsonify({"list":reponse}), 200
 
-
-@bottle.get(BASE_URL+ '/imei/<imei>')
+@app.route(BASE_URL+ '/imei/<imei>', methods=['GET'])
 def getStockByImei(psav,imei):
     imei = collection.find_one({"_id":imei,"psav":psav})
     if imei == None:
-        bottle.abort(404,"imei inconnu")
+        flask.abort(404,{"erreur":"imei inconnu"})
     imei["datmaj"] = str(imei["datmaj"])
     imei["imei"] = imei["_id"]
     del imei["_id"]
-    return json.dumps(imei)
+    return flask.jsonify(imei), 200
 
-@bottle.put(BASE_URL + '/imei/<imei>')
+@app.route(BASE_URL+ '/imei/<imei>', methods=['PUT'])
 def updateState(psav,imei):
     old = collection.find_one({"_id":imei,"psav":psav})
     if old == None:
-        bottle.abort(404,"imei inconnu")
+        flask.abort(404,{"erreur":"imei inconnu"})
 
-    etat = bottle.request.query.get("etat")
+    etat = flask.request.args.get("etat")
     allset = {}
     allunset = {}
     if etat != None:
         if not controleEtat(etat):
-            return bottle.abort(400,"etat non valide " + "etat")
+            return flask.abort(400,{"erreur":"etat non valide " + "etat"})
         if not controleCoherence("typ",old["etat"],etat):
-            return bottle.abort(400,"erreur coherence " + old["etat"] + "=>" + etat)
+            return flask.abort(400,{"erreur":"erreur coherence " + old["etat"] + "=>" + etat})
         allset["etat"] = etat
     allset["datmaj"] = datetime.datetime.now()
     modif = {"$set":allset}
@@ -121,42 +129,40 @@ def updateState(psav,imei):
     debug(str(modif))
     print (collection.update({"_id":imei,"psav":psav},modif))
     changement(psav,"type",old["etat"],etat)
-    return "OK"
+    return "", 201
 
-@bottle.post(BASE_URL + '/imei')
+@app.route(BASE_URL + '/imei', methods=['POST'])
 def create(psav):
-    try:
-        jsonObj = bottle.request.json
-    except ValueError:
-        return bottle.abort(400,"format incorrect")
+    if not flask.request.json:
+        abort(400)
+    jsonObj = flask.request.json
     for key,value in jsonObj.items():
         champ = CHAMPS.get(key)
         if champ == None:
-            return bottle.abort(400,"champ inconnu " + key)
+            return flask.abort(400,{"erreur":"champ inconnu " + key})
         if "controle" in champ and not champ["controle"](value):
-            return bottle.abort(400,"Mauvaise valeur " + value  + " pour " + key)
+            return flask.abort(400,{"erreur":"Mauvaise valeur " + value  + " pour " + key})
     for champ, valeur in CHAMPS.items():
         if valeur["obligatoire"] and champ not in jsonObj:
-            return bottle.abort(400, "il manque " + champ)
+            return flask.abort(400, {"erreur":"il manque " + champ})
     old = collection.find_one({"_id":jsonObj["imei"]})
     if old != None: 
         if old["psav"] != psav and old["etat"] not in PURGEABLE:
-            bottle.abort(400,"imei existe déjà dans un autre psav")
+            flask.abort(400,{"erreur":"imei existe déjà dans un autre psav"})
         if not controleCoherence("typ",old["etat"],jsonObj["etat"]):
-            return bottle.abort(400,"erreur coherence " + old["etat"] + "=>" + jsonObj["etat"])
+            return flask.abort(400,{"erreur":"erreur coherence " + old["etat"] + "=>" + jsonObj["etat"]})
     jsonObj["_id"] = jsonObj["imei"]
     del jsonObj["imei"]
     jsonObj["datmaj"] = datetime.datetime.now()
     jsonObj["psav"] = psav
     collection.save(jsonObj)
+    return "", 201
 
-
-
-@bottle.post(BASE_URL + '/transfert/<psavcible>')
+@app.route(BASE_URL + '/transfert/<psavcible>', methods=['POST'])
 def transfert(psav,psavcible):
 
     #nouvelle imei à insérer
     return "TODO"
 
-bottle.debug(True)
-bottle.run(host='localhost', port=8082)
+if __name__ == '__main__':
+    app.run(debug=True)
