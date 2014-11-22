@@ -1,7 +1,7 @@
 import csv
 import pymongo
 
-REFERENCES = ["classes","familles","types","etats"]
+REFERENCES = ["etats"]
 
 references = {}
 
