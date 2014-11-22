@@ -37,14 +37,6 @@ def controleGencod( gencod ):
     #TODO
     return True
 
-def controleFamille(famille):
-    return famille in references["familles"]
-
-def controleType(type):
-    return type in references["types"]
-
-def controleClasse(classe):
-    return classe in references["classes"]
 
 def changement(psav,typ,etat1,etat2):
     print(psav,typ,etat1,etat2)
@@ -57,32 +49,13 @@ CHAMPS = {
         "obligatoire" : True,
         "controle": controleImei
     },
-    "bi" :{
-        "obligatoire" : False,
-        "controle" : controleBi
-    },
     "gencod" :{
         "obligatoire" : True,
         "controle": controleGencod
     },
-    "motif" :{
-        "obligatoire" : False,
-    },
     "etat" :{
         "obligatoire" : True,
         "controle": controleEtat
-    },
-    "type" :{
-        "obligatoire" : True,
-        "controle": controleType
-    },
-    "classe" :{
-        "obligatoire" : True,
-        "controle": controleClasse
-    },
-    "famille" :{
-        "obligatoire" : True,
-        "controle": controleFamille
     }
 }
 
@@ -105,15 +78,12 @@ def getStock(psav):
         searchTerm["etat"] = etat
     elif tout == None:
         searchTerm["etat"] = {"$nin":PURGEABLE}
-
-    if bi != None:
-        searchTerm["bi"] = bi
-    if thetype != None:
-        searchTerm["type"] = thetype
     debug(searchTerm)
     reponse = []
-    for item in collection.find(searchTerm):
+    for item in collection.find(searchTerm,{"psav":0}):
         item["datmaj"] = str(item["datmaj"])
+        item["imei"] = item["_id"]
+        del item["_id"]
         reponse.append(item)
     debug(str(len(reponse)) + " trouvés")
     return json.dumps(reponse)
@@ -125,12 +95,9 @@ def getStockByImei(psav,imei):
     if imei == None:
         bottle.abort(404,"imei inconnu")
     imei["datmaj"] = str(imei["datmaj"])
+    imei["imei"] = imei["_id"]
+    del imei["_id"]
     return json.dumps(imei)
-
-def addToUnset(modif,field):
-    if "$unset" not in modif:
-        modif["$unset"] = {}
-    modif["$unset"][field] = 1
 
 @bottle.put(BASE_URL + '/imei/<imei>')
 def updateState(psav,imei):
@@ -139,8 +106,6 @@ def updateState(psav,imei):
         bottle.abort(404,"imei inconnu")
 
     etat = bottle.request.query.get("etat")
-    motif = bottle.request.query.get("motif")
-    bi = bottle.request.query.get("bi")
     allset = {}
     allunset = {}
     if etat != None:
@@ -149,19 +114,6 @@ def updateState(psav,imei):
         if not controleCoherence("typ",old["etat"],etat):
             return bottle.abort(400,"erreur coherence " + old["etat"] + "=>" + etat)
         allset["etat"] = etat
-    if bi != None:
-        if bi != "null":
-            if not controleBi(bi):
-                return bottle.abort(400,"bi non valide " + bi)
-            allset["bi"] = bi
-        else:
-            allunset["bi"] = 1
-
-    if motif != None:
-        if allset != "null":
-            modif["motif"] = motif
-        else:
-            allunset["motif"] = 1
     allset["datmaj"] = datetime.datetime.now()
     modif = {"$set":allset}
     if allunset != {}:
@@ -170,9 +122,6 @@ def updateState(psav,imei):
     print (collection.update({"_id":imei,"psav":psav},modif))
     changement(psav,"type",old["etat"],etat)
     return "OK"
-
-
-
 
 @bottle.post(BASE_URL + '/imei')
 def create(psav):
