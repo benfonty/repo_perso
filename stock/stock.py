@@ -5,6 +5,10 @@ import re
 import json
 import datetime
 #import stdnum
+import threading
+
+
+LOCK = threading.Lock()
 
 app = flask.Flask(__name__)
 
@@ -36,9 +40,6 @@ references = database.references.find_one()
 def controleEtat(etat):
     return etat in references["etats"]
         
-def controleBi(bi):
-    return len(bi) == 8
-
 def controleImei( l ):
     #TODO
     return True
@@ -109,27 +110,28 @@ def getStockByImei(psav,imei):
 
 @app.route(BASE_URL+ '/imei/<imei>', methods=['PUT'])
 def updateState(psav,imei):
-    old = collection.find_one({"_id":imei,"psav":psav})
-    if old == None:
-        flask.abort(404,{"erreur":"imei inconnu"})
-
-    etat = flask.request.args.get("etat")
-    allset = {}
-    allunset = {}
-    if etat != None:
-        if not controleEtat(etat):
-            return flask.abort(400,{"erreur":"etat non valide " + "etat"})
-        if not controleCoherence("typ",old["etat"],etat):
-            return flask.abort(400,{"erreur":"erreur coherence " + old["etat"] + "=>" + etat})
-        allset["etat"] = etat
-    allset["datmaj"] = datetime.datetime.now()
-    modif = {"$set":allset}
-    if allunset != {}:
-        modif["$unset"] = allunset
-    debug(str(modif))
-    print (collection.update({"_id":imei,"psav":psav},modif))
-    changement(psav,"type",old["etat"],etat)
-    return "", 201
+    with LOCK:
+       old = collection.find_one({"_id":imei,"psav":psav})
+       if old == None:
+           flask.abort(404,{"erreur":"imei inconnu"})
+    
+       etat = flask.request.args.get("etat")
+       allset = {}
+       allunset = {}
+       if etat != None:
+           if not controleEtat(etat):
+               return flask.abort(400,{"erreur":"etat non valide " + "etat"})
+           if not controleCoherence("typ",old["etat"],etat):
+               return flask.abort(400,{"erreur":"erreur coherence " + old["etat"] + "=>" + etat})
+           allset["etat"] = etat
+       allset["datmaj"] = datetime.datetime.now()
+       modif = {"$set":allset}
+       if allunset != {}:
+           modif["$unset"] = allunset
+       debug(str(modif))
+       print (collection.update({"_id":imei,"psav":psav},modif))
+       changement(psav,"type",old["etat"],etat)
+       return "", 201
 
 @app.route(BASE_URL + '/imei', methods=['POST'])
 def create(psav):
@@ -145,18 +147,19 @@ def create(psav):
     for champ, valeur in CHAMPS.items():
         if valeur["obligatoire"] and champ not in jsonObj:
             return flask.abort(400, {"erreur":"il manque " + champ})
-    old = collection.find_one({"_id":jsonObj["imei"]})
-    if old != None: 
-        if old["psav"] != psav and old["etat"] not in PURGEABLE:
-            flask.abort(400,{"erreur":"imei existe déjà dans un autre psav"})
-        if not controleCoherence("typ",old["etat"],jsonObj["etat"]):
-            return flask.abort(400,{"erreur":"erreur coherence " + old["etat"] + "=>" + jsonObj["etat"]})
-    jsonObj["_id"] = jsonObj["imei"]
-    del jsonObj["imei"]
-    jsonObj["datmaj"] = datetime.datetime.now()
-    jsonObj["psav"] = psav
-    collection.save(jsonObj)
-    return "", 201
+    with LOCK:
+        old = collection.find_one({"_id":jsonObj["imei"]})
+        if old != None: 
+            if old["psav"] != psav and old["etat"] not in PURGEABLE:
+                flask.abort(400,{"erreur":"imei existe déjà dans un autre psav"})
+            if not controleCoherence("typ",old["etat"],jsonObj["etat"]):
+                return flask.abort(400,{"erreur":"erreur coherence " + old["etat"] + "=>" + jsonObj["etat"]})
+        jsonObj["_id"] = jsonObj["imei"]
+        del jsonObj["imei"]
+        jsonObj["datmaj"] = datetime.datetime.now()
+        jsonObj["psav"] = psav
+        collection.save(jsonObj)
+        return "", 201
 
 @app.route(BASE_URL + '/transfert/<psavcible>', methods=['POST'])
 def transfert(psav,psavcible):
@@ -165,4 +168,4 @@ def transfert(psav,psavcible):
     return "TODO"
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, threaded=True)
