@@ -36,16 +36,14 @@ collection = database.stock
 references = database.references.find_one()
 
 def controleEtat(etat):
-    #return etat in references["etats"]
-    pass
+    return etat in references["etats"]
         
 def controleImei( l ):
     #TODO
     return True
 
 def controleGencod( gencod ):
-    #TODO
-    return True
+    return database.gencods.find_one({"_id":gencod})
 
 
 def changement(psav,typ,etat1,etat2):
@@ -65,8 +63,7 @@ CHAMPS = {
         "controle": controleImei
     },
     "gencod" :{
-        "obligatoire" : True,
-        "controle": controleGencod
+        "obligatoire" : True
     },
     "etat" :{
         "obligatoire" : True,
@@ -88,7 +85,7 @@ def getStock(psav):
         searchTerm["etat"] = {"$nin":ETATS_PURGEABLE}
     debug(searchTerm)
     reponse = []
-    for item in collection.find(searchTerm,{"psav":0}):
+    for item in collection.find(searchTerm,{"psav":0, "reappro":0}):
         item["datmaj"] = str(item["datmaj"])
         item["imei"] = item["_id"]
         del item["_id"]
@@ -104,6 +101,8 @@ def getStockByImei(psav,imei):
     imei["datmaj"] = str(imei["datmaj"])
     imei["imei"] = imei["_id"]
     del imei["_id"]
+    del imei["psav"]
+    del imei["reappro"]
     return flask.jsonify(imei), 200
 
 @app.route(BASE_URL+ '/imei/<imei>', methods=['PUT'])
@@ -146,6 +145,9 @@ def create(psav):
     for champ, valeur in CHAMPS.items():
         if valeur["obligatoire"] and champ not in jsonObj:
             return flask.abort(400, {"erreur":"il manque " + champ})
+    gencod = controleGencod(jsonObj["gencod"])
+    if gencod == None:
+        return flask.abort(400,{"erreur":"Mauvaise valeur " + jsonObj["gencod"]  + " pour gencod"})
     with LOCK:
         old = collection.find_one({"_id":jsonObj["imei"]})
         if old != None: 
@@ -157,6 +159,11 @@ def create(psav):
         del jsonObj["imei"]
         jsonObj["datmaj"] = datetime.datetime.now()
         jsonObj["psav"] = psav
+        jsonObj["type"] = gencod["type"]["code"]
+        if jsonObj["type"] in ("SIM","SIM_F"):
+            jsonObj["reappro"] = gencod["famille"]["libelle"]
+        else:
+            jsonObj["reappro"] = gencod["classe"]["libelle"]
         collection.save(jsonObj)
         return "", 201
 
