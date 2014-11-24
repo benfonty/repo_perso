@@ -50,7 +50,12 @@ def controleGencod( gencod ):
 
 
 def changement(psav,typ,etat1,etat2):
-    print(psav,typ,etat1,etat2)
+    print("changement",psav,typ,etat1,etat2)
+    if etat2 == None:
+        return
+    if etat1 == 'D':
+        
+
 
 def controleCoherence(typ,etat1,etat2):
     return True
@@ -111,32 +116,33 @@ def getStockByImei(psav,imei):
 @app.route(BASE_URL+ '/imei/<imei>', methods=['PUT'])
 def updateState(psav,imei):
     with LOCK:
-       old = collection.find_one({"_id":imei,"psav":psav})
-       if old == None:
+        old = collection.find_one({"_id":imei,"psav":psav})
+        if old == None:
            flask.abort(404,{"erreur":"imei inconnu"})
     
-       etat = flask.request.args.get("etat")
-       allset = {}
-       allunset = {}
-       if etat != None:
-           if not controleEtat(etat):
-               return flask.abort(400,{"erreur":"etat non valide " + "etat"})
-           if not controleCoherence("typ",old["etat"],etat):
+        etat = flask.request.args.get("etat")
+        allset = {}
+        allunset = {}
+        if etat != None:
+            if not controleEtat(etat):
+                return flask.abort(400,{"erreur":"etat non valide " + "etat"})
+            if not controleCoherence("typ",old["etat"],etat):
                return flask.abort(400,{"erreur":"erreur coherence " + old["etat"] + "=>" + etat})
-           allset["etat"] = etat
-       allset["datmaj"] = datetime.datetime.now()
-       modif = {"$set":allset}
-       if allunset != {}:
-           modif["$unset"] = allunset
-       debug(str(modif))
-       print (collection.update({"_id":imei,"psav":psav},modif))
-       changement(psav,"type",old["etat"],etat)
-       return "", 201
+            allset["etat"] = etat
+        allset["datmaj"] = datetime.datetime.now()
+        modif = {"$set":allset}
+        if allunset != {}:
+            modif["$unset"] = allunset
+        debug(str(modif))
+        print (collection.update({"_id":imei,"psav":psav},modif))
+        if flask.request.args.get("maintenance") == None and old["etat"] != etat:
+            changement(psav,"type",old["etat"],etat)
+        return "", 201
 
 @app.route(BASE_URL + '/imei', methods=['POST'])
 def create(psav):
     if not flask.request.json:
-        abort(400)
+        flask.abort(400)
     jsonObj = flask.request.json
     for key,value in jsonObj.items():
         champ = CHAMPS.get(key)
