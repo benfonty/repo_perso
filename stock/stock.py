@@ -18,7 +18,7 @@ def not_found(error):
 
 @app.errorhandler(400)
 def not_found(error):
-    return flask.make_response(flask.jsonify({"error":str(error)}), 400)
+    return flask.jsonify({"error":str(error)}), 400
 
 BASE_URL = '/stock/<psav>'
 
@@ -35,6 +35,8 @@ collection = database.stock
 
 references = database.references.find_one()
 
+ETATS_PURGEABLE = ['C','T']
+
 def controleEtat(etat):
     return etat in references["etats"]
         
@@ -49,13 +51,11 @@ def controleGencod( gencod ):
 def changement(psav,typ,etat1,etat2):
     print("changement",psav,typ,etat1,etat2)
         
-
-
 def controleCoherence(typ,etat1,etat2):
     return True
 
 def purge(psav):
-    collection.remove({"psav":psav,"etat":{"$in":['C','T']}})
+    collection.remove({"psav":psav,"etat":{"$in":ETATS_PURGEABLE}})
 
 CHAMPS = {
     "imei" :{
@@ -151,7 +151,7 @@ def create(psav):
     with LOCK:
         old = collection.find_one({"_id":jsonObj["imei"]})
         if old != None: 
-            if old["psav"] != psav and old["etat"] not in PURGEABLE:
+            if old["psav"] != psav and old["etat"] not in ETATS_PURGEABLE:
                 flask.abort(400,{"erreur":"imei existe déjà dans un autre psav"})
             if not controleCoherence("typ",old["etat"],jsonObj["etat"]):
                 return flask.abort(400,{"erreur":"erreur coherence " + old["etat"] + "=>" + jsonObj["etat"]})
