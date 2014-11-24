@@ -131,7 +131,7 @@ def updateState(psav,imei):
        debug(str(modif))
        print (collection.update({"_id":imei,"psav":psav},modif))
        changement(psav,"type",old["etat"],etat)
-       return "", 201
+       return "", 204
 
 @app.route(BASE_URL + '/imei', methods=['POST'])
 def create(psav):
@@ -165,7 +165,7 @@ def create(psav):
 def transfert(psav,psavcible):
 
     #nouvelle imei à insérer
-    return "TODO"
+    return "TODO", 204
 
 if __name__ == '__main__':
     app.run(debug=True, threaded=True)
