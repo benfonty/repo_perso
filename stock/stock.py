@@ -28,8 +28,6 @@ def debug(str):
     if DEBUG:
         print("DEBUG",datetime.datetime.utcnow(),str)
 
-PURGEABLE = ['C','T']
-
 connection_string = "mongodb://localhost"
 connection = pymongo.MongoClient(connection_string)
 database = connection.stock
@@ -38,7 +36,8 @@ collection = database.stock
 references = database.references.find_one()
 
 def controleEtat(etat):
-    return etat in references["etats"]
+    #return etat in references["etats"]
+    pass
         
 def controleImei( l ):
     #TODO
@@ -51,14 +50,14 @@ def controleGencod( gencod ):
 
 def changement(psav,typ,etat1,etat2):
     print("changement",psav,typ,etat1,etat2)
-    if etat2 == None:
-        return
-    if etat1 == 'D':
         
 
 
 def controleCoherence(typ,etat1,etat2):
     return True
+
+def purge(psav):
+    collection.remove({"psav":psav,"etat":{"$in":['C','T']}})
 
 CHAMPS = {
     "imei" :{
@@ -75,12 +74,6 @@ CHAMPS = {
     }
 }
 
-assert controleEtat('D')
-assert not controleEtat('PP')
-assert controleImei('329463363608757')
-#assert not controleImei('329463363608758')
-
-
 @app.route(BASE_URL, methods=['GET'])
 def getStock(psav):
     gencod = flask.request.args.get("gencod")
@@ -92,7 +85,7 @@ def getStock(psav):
     if etat != None:
         searchTerm["etat"] = etat
     elif tout == None:
-        searchTerm["etat"] = {"$nin":PURGEABLE}
+        searchTerm["etat"] = {"$nin":ETATS_PURGEABLE}
     debug(searchTerm)
     reponse = []
     for item in collection.find(searchTerm,{"psav":0}):
@@ -170,8 +163,19 @@ def create(psav):
 @app.route(BASE_URL + '/transfert/<psavcible>', methods=['POST'])
 def transfert(psav,psavcible):
 
-    #nouvelle imei à insérer
-    return "TODO"
+    typeTransfert = gencod = flask.request.args.get("type")
+    if typeTransfert not in ("total","partiel"):
+        flask.abort(400,{"erreur":"Mauvais type de transfert"})
+    if collection.find_one({"psav":psav}) == None:
+        flask.abort(400,{"erreur":"Pas de stock pour le pSAV source"})
+    if typeTransfert == "partiel":
+        collection.update({"psav":psav,"etat":{"$in":['D','R']},"type":{"$ne":"SIM"}},{"$set":{"etat":"X"}},multi = True)
+    reponse = collection.update({"psav":psav,"etat":{"$in":['D','K','R']}},{"$set":{"psav":psavcible}},multi = True)
+    purge(psav)
+    return flask.jsonify({"transfert":reponse["nModified"]}),200
+        
+        
+
 
 if __name__ == '__main__':
     app.run(debug=True, threaded=True)
