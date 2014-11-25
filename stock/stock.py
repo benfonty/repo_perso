@@ -111,6 +111,7 @@ class ImeiList(Resource):
             item["datmaj"] = str(item["datmaj"])
             item["imei"] = item["_id"]
             del item["_id"]
+            item["uri"] = api.url_for(Imei, psav=psav, imei=item["imei"], _external=True)
             reponse.append(item)
         debug(str(len(reponse)) + " trouvés")
         return {"list":reponse}, 200
@@ -160,7 +161,7 @@ class Transfert(Resource):
 
 BASE_URL = '/stock/<psav>'
 app = Flask(__name__)
-api = Api(app)
+api = Api(app, default_mediatype="application/json")
 api.add_resource(Imei,BASE_URL + '/imei/<imei>')
 api.add_resource(ImeiCreation,BASE_URL + '/imei')
 api.add_resource(ImeiList,BASE_URL)
