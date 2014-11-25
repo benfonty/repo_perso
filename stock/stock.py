@@ -1,6 +1,6 @@
 import pymongo
 from flask import Flask
-from flask.ext.restful import request, abort, Api, Resource
+from flask.ext.restful import request, abort, Api, Resource, reqparse
 import datetime
 import threading
 
@@ -34,7 +34,6 @@ def luhnCheck(card_number):
             digit = digit * 2
         if digit > 9:
             digit = digit - 9
-
         sum = sum + digit
     return ( (sum % 10) == 0 )
        
@@ -55,19 +54,13 @@ def controleCoherence(typ,etat1,etat2):
 def purge(psav):
     collection.remove({"psav":psav,"etat":{"$in":ETATS_PURGEABLE}})
 
-CHAMPS = {
-    "imei" :{
-        "obligatoire" : True,
-        "controle": controleImei
-    },
-    "gencod" :{
-        "obligatoire" : True
-    },
-    "etat" :{
-        "obligatoire" : True,
-        "controle": controleEtat
-    }
-}
+parserPut = reqparse.RequestParser()
+parserPut.add_argument('etat', type=str, required = True, help='Etat obligatoire', location = 'args')
+
+parserPost = reqparse.RequestParser()
+parserPost.add_argument('imei', type=str, required = True, help='imei obligatoire')
+parserPost.add_argument('gencod', type=str, required = True, help='gencod obligatoire')
+parserPost.add_argument('etat', type=str, required = True, help='etat obligatoire')
 
 class Imei(Resource):
     def get(self,psav, imei):
@@ -86,18 +79,18 @@ class Imei(Resource):
                abort(404,message = "imei inconnu " + imei)
             etat = request.args.get("etat")
             allset = {}
-            if etat != None:
-                if not controleEtat(etat):
-                    return abort(400,message = "etat non valide " + etat)
-                if not controleCoherence("typ",old["etat"],etat):
-                   return abort(400,message = "erreur coherence " + old["etat"] + "=>" + etat)
+            args = parserPut.parse_args()
+            if not controleEtat(args["etat"]):
+                return abort(400,message = "etat non valide " + args["etat"])
+            if not controleCoherence("typ",old["etat"],args["etat"]):
+                return abort(400,message = "erreur coherence " + old["etat"] + "=>" + args["etat"])
                 allset["etat"] = etat
             allset["datmaj"] = datetime.datetime.now()
             modif = {"$set":allset}
             debug(str(modif))
             print (collection.update({"_id":imei,"psav":psav},modif))
-            if request.args.get("maintenance") == None and old["etat"] != etat:
-                changement(psav,"type",old["etat"],etat)
+            if request.args.get("maintenance") == None and old["etat"] != args["etat"]:
+                changement(psav,"type",old["etat"],args["etat"])
             return "", 204
 
 class ImeiList(Resource):
@@ -124,38 +117,32 @@ class ImeiList(Resource):
 
 class ImeiCreation(Resource):
     def post(self,psav):
-        if not request.json:
-            abort(400,message = "Pas du Json")
-        jsonObj = request.json
-        for key,value in jsonObj.items():
-            champ = CHAMPS.get(key)
-            if champ == None:
-                return abort(400,message = "champ inconnu " + key)
-            if "controle" in champ and not champ["controle"](value):
-                return abort(400,message = "Mauvaise valeur " + value  + " pour " + key)
-        for champ, valeur in CHAMPS.items():
-            if valeur["obligatoire"] and champ not in jsonObj:
-                return abort(400, message = "il manque " + champ)
-        gencod = controleGencod(jsonObj["gencod"])
+        args = parserPost.parse_args()
+        if not controleEtat(args["etat"]):
+            return abort(400,message = "Mauvaise valeur " + args["etat"]  + " pour etat")
+        if not controleImei(args["imei"]):
+            return abort(400,message = "Mauvaise valeur " + args["imei"]  + " pour imei")
+        gencod = controleGencod(args["gencod"])
         if gencod == None:
-            return abort(400,message = "Mauvaise valeur " + jsonObj["gencod"]  + " pour gencod")
+            return abort(400,message = "Mauvaise valeur " + args["gencod"]  + " pour gencod")
         with LOCK:
-            old = collection.find_one({"_id":jsonObj["imei"]})
+            old = collection.find_one({"_id":args["imei"]})
             if old != None: 
                 if old["psav"] != psav and old["etat"] not in ETATS_PURGEABLE:
                     abort(400,message="imei existe déjà dans un autre psav")
-                if not controleCoherence("typ",old["etat"],jsonObj["etat"]):
-                    return abort(400,message = "erreur coherence " + old["etat"] + "=>" + jsonObj["etat"])
-            jsonObj["_id"] = jsonObj["imei"]
-            del jsonObj["imei"]
-            jsonObj["datmaj"] = datetime.datetime.now()
-            jsonObj["psav"] = psav
-            jsonObj["type"] = gencod["type"]["code"]
-            if jsonObj["type"] in ("SIM","SIM_F"):
-                jsonObj["reappro"] = gencod["famille"]["libelle"]
+                if not controleCoherence("typ",old["etat"],args["etat"]):
+                    return abort(400,message = "erreur coherence " + old["etat"] + "=>" + args["etat"])
+            args["_id"] = args["imei"]
+            del args["imei"]
+            args["datmaj"] = datetime.datetime.now()
+            args["psav"] = psav
+            args["type"] = gencod["type"]["code"]
+            if args["type"] in ("SIM","SIM_F"):
+                args["reappro"] = gencod["famille"]["libelle"]
             else:
-                jsonObj["reappro"] = gencod["classe"]["libelle"]
-            collection.save(jsonObj)
+                args["reappro"] = gencod["classe"]["libelle"]
+            print (args)
+            collection.save(args)
             return "", 201
 
 class Transfert(Resource):
