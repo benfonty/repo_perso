@@ -8,9 +8,9 @@ LOCK = threading.Lock()
 
 DEBUG = True
 
-def debug(str):
+def debug(*affichage):
     if DEBUG:
-        print("DEBUG",datetime.datetime.utcnow(),str)
+        print("DEBUG",datetime.datetime.utcnow()," : "," ".join([ str(x) for x in list(affichage)]))
 
 connection_string = "mongodb://localhost"
 connection = pymongo.MongoClient(connection_string)
@@ -46,7 +46,7 @@ def controleGencod( gencod ):
 
 
 def changement(psav,type,classe,etat1,etat2):
-    print("changement",psav,type,classe,etat1,etat2)
+    debug("changement",psav,type,classe,etat1,etat2)
     comptabilise = False
     comptabilise = comptabilise or (type in ("SIM","SIM_F") and etat1 == "D" and etat2 == "C")
     comptabilise = comptabilise or (type in ("KDP","KDP_F") and etat1 == "D" and etat2 == "K")
@@ -93,7 +93,7 @@ class Imei(Resource):
             args["datmaj"] = datetime.datetime.now()
             modif = {"$set":args}
             debug(str(modif))
-            print (collection.update({"_id":imei,"psav":psav},modif))
+            debug (collection.update({"_id":imei,"psav":psav},modif))
         if request.args.get("maintenance") == None and old["etat"] != args["etat"]:
             changement(psav,old["type"],old["reappro"],old["etat"],args["etat"])
         return "", 204
@@ -147,7 +147,7 @@ class ImeiCreation(Resource):
                 args["reappro"] = gencod["famille"]["libelle"]
             else:
                 args["reappro"] = gencod["classe"]["libelle"]
-            print (args)
+            debug (args)
             collection.save(args)
             return "", 201
 
