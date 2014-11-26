@@ -45,8 +45,14 @@ def controleGencod( gencod ):
     return database.gencods.find_one({"_id":gencod})
 
 
-def changement(psav,typ,etat1,etat2):
-    print("changement",psav,typ,etat1,etat2)
+def changement(psav,type,classe,etat1,etat2):
+    print("changement",psav,type,classe,etat1,etat2)
+    comptabilise = False
+    comptabilise = comptabilise or (type in ("SIM","SIM_F") and etat1 == "D" and etat2 == "C")
+    comptabilise = comptabilise or (type in ("KDP","KDP_F") and etat1 == "D" and etat2 == "K")
+    if comptabilise:
+        debug("comptabilise")
+        database.usages.insert({"date":datetime.datetime.now(),"psav":psav,"classe":classe})
         
 def controleCoherence(typ,etat1,etat2):
     return True
@@ -77,21 +83,20 @@ class Imei(Resource):
             old = collection.find_one({"_id":imei,"psav":psav})
             if old == None:
                abort(404,message = "imei inconnu " + imei)
-            etat = request.args.get("etat")
+            args = parserPut.parse_args()
             allset = {}
             args = parserPut.parse_args()
             if not controleEtat(args["etat"]):
                 return abort(400,message = "etat non valide " + args["etat"])
             if not controleCoherence("typ",old["etat"],args["etat"]):
                 return abort(400,message = "erreur coherence " + old["etat"] + "=>" + args["etat"])
-                allset["etat"] = etat
-            allset["datmaj"] = datetime.datetime.now()
-            modif = {"$set":allset}
+            args["datmaj"] = datetime.datetime.now()
+            modif = {"$set":args}
             debug(str(modif))
             print (collection.update({"_id":imei,"psav":psav},modif))
-            if request.args.get("maintenance") == None and old["etat"] != args["etat"]:
-                changement(psav,"type",old["etat"],args["etat"])
-            return "", 204
+        if request.args.get("maintenance") == None and old["etat"] != args["etat"]:
+            changement(psav,old["type"],old["reappro"],old["etat"],args["etat"])
+        return "", 204
 
 class ImeiList(Resource):
     def get(self,psav):
