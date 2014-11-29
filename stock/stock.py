@@ -1,8 +1,11 @@
 import pymongo
+from collections import OrderedDict
 from flask import Flask
 from flask.ext.restful import request, abort, Api, Resource, reqparse
 import datetime
 import threading
+import random
+import copy
 
 LOCK = threading.Lock() 
 
@@ -164,13 +167,79 @@ class Transfert(Resource):
         purge(psav)
         return {"transfert":reponse["nModified"]},200
 
-BASE_URL = '/stock/<psav>'
+NOM_COLL_STOCK_DISPO_AGGREGE = "stock_dispo_aggrege_"
+NOM_COLL_STOCK_ROULANT_AGGREGE = "stock_roulant_aggrege_"
+NOM_COLL_ACTIVITE_AGGREGE = "activite_aggrege_"
+
+class Reappro(Resource):
+    def post(self):
+        PO = 40
+        TCG = 70
+        SEUIL = 0
+        resultat = {}
+        dateDepart = datetime.date.today() - datetime.timedelta(days=PO)
+        theDateDepart = datetime.datetime.combine(dateDepart, datetime.datetime.min.time())
+        print (theDateDepart)
+        random.seed()
+        numReappro = random.randint(0,1000000)
+        col_activite_aggrege = NOM_COLL_ACTIVITE_AGGREGE + str(numReappro)
+        col_stock_roulant_aggrege = NOM_COLL_STOCK_ROULANT_AGGREGE + str(numReappro)
+        col_stock_dispo_aggrege = NOM_COLL_STOCK_DISPO_AGGREGE + str(numReappro)
+        database.usages.aggregate([{"$match":{"date":{"$gt":theDateDepart}}},
+            {"$group":{"_id":OrderedDict([("psav","$psav"),("classe","$classe")]),"count":{"$sum":1}}},
+            {"$out":col_activite_aggrege}])
+        database.stock.aggregate([{"$match":{"etat":{"$in":['D','K']}}},
+            {"$group":{"_id":OrderedDict([("psav","$psav"),("classe","$reappro")]),"count":{"$sum":1}}},
+            {"$out":col_stock_roulant_aggrege}])
+        database.stock.aggregate([{"$match":{"etat":{"$in":['D']}}},
+            {"$group":{"_id":OrderedDict([("psav","$psav"),("classe","$reappro")]),"count":{"$sum":1}}},
+            {"$out":col_stock_dispo_aggrege}])
+        classes_reappro = database.gencods.distinct("classe.libelle")
+        classes_reappro = classes_reappro + database.gencods.distinct("famille.libelle")
+        for psav in collection.distinct("psav"):
+            resultat[psav] = {}
+            for classe_reappro in classes_reappro:
+                tcg = TCG
+                try:
+                    tcg = references["reappro"][classe_reappro]["TCG"]
+                except KeyError:
+                    pass
+                seuil = SEUIL
+                try:
+                    seuil = references["reappro"][classe_reappro]["SEUIL"]
+                except KeyError:
+                    pass
+                searchTerm = OrderedDict([("psav",psav),("classe",classe_reappro)])
+                activite = database[col_activite_aggrege].find_one({"_id":searchTerm})
+                if activite == None:
+                    activite = {"count":0}
+                stockDispo = database[col_stock_roulant_aggrege].find_one({"_id":searchTerm})
+                if stockDispo == None:
+                    stockDispo = {"count":0}
+                stockRoulant = database[col_stock_dispo_aggrege].find_one({"_id":searchTerm})
+                if stockRoulant == None:
+                    stockRoulant = {"count":0}
+                besoin  = round(activite["count"] * tcg / 100) - stockRoulant["count"]
+                if besoin < 0:
+                    besoin = 0
+                if besoin + stockDispo["count"] < seuil:
+                    besoin = seuil - stockDispo["count"]
+                if besoin != 0:
+                    resultat[psav][classe_reappro] = besoin
+        #database[col_activite_aggrege].drop()
+        #database[col_stock_roulant_aggrege].drop()
+        #database[col_stock_dispo_aggrege].drop()
+        return resultat,200
+
+BASE_URL = '/stock'
+BASE_URL_PSAV = BASE_URL + '/<psav>'
 app = Flask(__name__)
 api = Api(app, default_mediatype="application/json")
-api.add_resource(Imei,BASE_URL + '/imei/<imei>')
-api.add_resource(ImeiCreation,BASE_URL + '/imei')
-api.add_resource(ImeiList,BASE_URL)
-api.add_resource(Transfert,BASE_URL + '/transfert/<psavcible>')
+api.add_resource(Imei,BASE_URL_PSAV + '/imei/<imei>')
+api.add_resource(ImeiCreation,BASE_URL_PSAV + '/imei')
+api.add_resource(ImeiList,BASE_URL_PSAV)
+api.add_resource(Transfert,BASE_URL_PSAV + '/transfert/<psavcible>')
+api.add_resource(Reappro,BASE_URL + '/reappro')
 
 if __name__ == '__main__':
     app.run(debug=True, threaded=True)
