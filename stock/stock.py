@@ -196,8 +196,9 @@ class Reappro(Resource):
             {"$out":col_stock_dispo_aggrege}])
         classes_reappro = database.gencods.distinct("classe.libelle")
         classes_reappro = classes_reappro + database.gencods.distinct("famille.libelle")
+        resultat = []
         for psav in collection.distinct("psav"):
-            resultat[psav] = {}
+            resultatPsav = {}
             for classe_reappro in classes_reappro:
                 tcg = TCG
                 try:
@@ -225,9 +226,9 @@ class Reappro(Resource):
                 if besoin + stockDispo["count"] < seuil:
                     besoin = seuil - stockDispo["count"]
                 if besoin != 0:
-                    resultat[psav][classe_reappro] = besoin
-            if resultat[psav] == {}:
-                del resultat[psav]
+                    resultatPsav[classe_reappro] = besoin
+            if resultatPsav != {}:
+                resultat.append({"psav":psav,"reappro":resultatPsav})
         database[col_activite_aggrege].drop()
         database[col_stock_roulant_aggrege].drop()
         database[col_stock_dispo_aggrege].drop()
