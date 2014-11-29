@@ -213,10 +213,10 @@ class Reappro(Resource):
                 activite = database[col_activite_aggrege].find_one({"_id":searchTerm})
                 if activite == None:
                     activite = {"count":0}
-                stockDispo = database[col_stock_roulant_aggrege].find_one({"_id":searchTerm})
+                stockDispo = database[col_stock_dispo_aggrege].find_one({"_id":searchTerm})
                 if stockDispo == None:
                     stockDispo = {"count":0}
-                stockRoulant = database[col_stock_dispo_aggrege].find_one({"_id":searchTerm})
+                stockRoulant = database[col_stock_roulant_aggrege].find_one({"_id":searchTerm})
                 if stockRoulant == None:
                     stockRoulant = {"count":0}
                 besoin  = round(activite["count"] * tcg / 100) - stockRoulant["count"]
@@ -226,9 +226,11 @@ class Reappro(Resource):
                     besoin = seuil - stockDispo["count"]
                 if besoin != 0:
                     resultat[psav][classe_reappro] = besoin
-        #database[col_activite_aggrege].drop()
-        #database[col_stock_roulant_aggrege].drop()
-        #database[col_stock_dispo_aggrege].drop()
+            if resultat[psav] == {}:
+                del resultat[psav]
+        database[col_activite_aggrege].drop()
+        database[col_stock_roulant_aggrege].drop()
+        database[col_stock_dispo_aggrege].drop()
         return resultat,200
 
 BASE_URL = '/stock'
