@@ -176,10 +176,8 @@ class Reappro(Resource):
         PO = 40
         TCG = 70
         SEUIL = 0
-        resultat = {}
         dateDepart = datetime.date.today() - datetime.timedelta(days=PO)
         theDateDepart = datetime.datetime.combine(dateDepart, datetime.datetime.min.time())
-        print (theDateDepart)
         random.seed()
         numReappro = random.randint(0,1000000)
         col_activite_aggrege = NOM_COLL_ACTIVITE_AGGREGE + str(numReappro)
