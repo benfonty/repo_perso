@@ -14,8 +14,6 @@ import java.util.Calendar
 class Perf extends Simulation {
 
  
-  val baseUrl = "localhost:5000/stock/"
-
   //la duree du test en seconde
   val dureeTest = 60
 
@@ -26,27 +24,10 @@ class Perf extends Simulation {
   /******************************************************************/
   /******************************************************************/
 
-  val httpConfServicenc7000 = httpConfig
-    .baseURL(urlServiceNC700)
+  val baseUrl = httpConfig
+    .baseURL("localhost:5000/stock/")
 
-  val httpConfApi = httpConfig
-    .baseURL(urlWebApiPasserelle)
-
-  val httpConfServiceSAIO = httpConfig
-    .baseURL(urlServiceSAIO)
-
-  val httpConfServiceCustomerOffer = httpConfig
-    .baseURL(urlServiceCustomerOffer)
-
-  val httpConfServiceRadiusOffer = httpConfig
-    .baseURL(urlServiceRadiusOffer)
-
-  val httpConfServiceHealthcheck = httpConfig
-    .baseURL(urlServiceHealthcheck)
-
-  val httpConfServiceNotiferMouvementCT = httpConfig
-    .baseURL(urlNotifierMouvementCT)
-
+ 
   /******************************************************************/
   /******************************************************************/
   /***************************   FEEDS   ****************************/
@@ -54,76 +35,32 @@ class Perf extends Simulation {
   /******************************************************************/
   /******************************************************************/
 
-  //feed utilisee pour getFixCustomerControlData  et getMobileCustomerControlData et CustomerOffer
-  val feedInfoSRVID = csv("PA_SRVID.csv").random
-  val feedInfoMSISDN = csv("PA_MSISDN.csv").random
-  val feedInfoEID = csv("PA_EID.csv").random
+  // TODO produire les fichiers de feeds
+  val feedImeiPsav = csv("imeiPsav.csv").random // imei,gencod,psav
+  val feedImeiPsavPersistent = csv("imeiPsavPersistent.csv").random // imei,gencod,psav, que les psav qui ne servent pas au transfert de stock
+  val feedPsav = csv("psav.csv").random 
+  val feedPsavTransfert = csv("psavTransfert.csv").random
 
-  //pour les TOKEN
-  val feedPersonToken = csv("extractToken.csv").random
-
-  //pour SAIO
-  val feedInfoPA = csv("PA.csv").random
-
-  // pour radius offer
-  val rngCustomSRVID = new scala.util.Random
-
-  val feedInfoCustomSRVID = new Feeder[String] {
+  val feedEtat = new Feeder[String] {
 
     private val RNG = new scala.util.Random
-
-    private def randInt(a: Int, b: Int) = RNG.nextInt(b - a) + a
 
     override def hasNext = true
 
     override def next: Map[String, String] = {
-      val srvid = randInt(100000, 999999).toString()
-
-      Map("customsrvid" -> srvid.toString())
-    }
-  }
-
-  val feedInfoCustomOffre = new Feeder[String] {
-
-    private val RNG = new scala.util.Random
-
-    private def randInt(a: Int, b: Int) = RNG.nextInt(b - a) + a
-
-    override def hasNext = true
-
-    override def next: Map[String, String] = {
-      val customoffre: Int = randInt(1, 10)
-      var body: String = """{"radiusOffers" : [ """
-      for (i <- 0 to customoffre) {
-        if (i != customoffre) {
-          body = body + """"""" + lstRadiusOffer(i).toString() + """"""" + " , "
-        } else {
-          body = body + """"""" + lstRadiusOffer(i).toString() + """""""
-        }
+      val rand: Int = RNG.nextInt(1)
+      var etat = "D"
+      if (rand == 1) {
+        etat = "K"
       }
-      body = body + " ]}"
-
-      Map("bodyRadiusOffer" -> body.toString())
+      Map("etat" -> etat)
     }
   }
 
-  val feedNumVoip = new Feeder[String] {
-
-    private val RNG = new scala.util.Random
-
-    private def randInt(a: Int, b: Int) = RNG.nextInt(b - a) + a
-
-    override def hasNext = true
-
-    override def next: Map[String, String] = {
-      val srvid = randInt(1, 999999999).toString()
-
-      Map("numvoip" -> srvid.toString())
-    }
+  val feedBodyStock = new Feeder[String] {
+    //TODO
   }
-
-  val feedPfsPourNotifier = csv("notifierMouvement.csv").circular
-
+ 
   //fin feeds
 
   /******************************************************************/
@@ -134,123 +71,51 @@ class Perf extends Simulation {
 
   //les scenarios
 
-  //NC7000 PSWG
-  val scnNC7000MobileAvecMsisdn = scenario("[PSWG] getCustomerControlData avec msisdn")
-    .feed(feedInfoMSISDN)
+  val scnBulkCheckImei = scenario("Interrogation en masse")
+    .feed(feedPSAV)
     .exec(
-      http("[PSWG] CustomerControlData avec msisdn")
-        .get("/MSISDN/@${pointAccesDares.0.cle.valeur}")
+      http("Interrogation en masse")
+        .get("/${psav}/")
         .check(status.is(200)))
 
-  val scnNC7000MobileAvecEid = scenario("getCustomerControlData avec eid")
-    .feed(feedInfoEID)
+  val scnCheckImei = scenario("Check d'un imei")
+    .feed(feedImeiPsav)
     .exec(
-      http("[PSWG] CustomerControlData avec eid")
-        .get("/EID/@${pointAccesDares.0.cle.valeur}")
-        .check(status.is(200)))
+      http("Check d'un imei")
+        .get("/${psav}/imei/${imei}")
+        .check(status.in(200,404)))
 
-  val scnNC7000FixeAvecSrvId = scenario("getCustomerControlData avec srv_id")
-    .feed(feedInfoSRVID)
+  val scnUpdateImei = scenario("Changement d'état d'un imei")
+    .feed(feedImeiPsavPersistent)
+    .feed(feedEtat)
     .exec(
-      http("[PSWG] CustomerControlData avec srv_id")
-        .get("/srv_id/@${pointAccesDares.0.cle.valeur}")
-        .check(status.is(200)))
-
-  // NC70003A GET 
-  val scnNC70003aMobileGET = scenario("[TOKEN] GET TOKEN")
-    .feed(feedPersonToken)
-    .exec(
-      http("[TOKEN-GET] get(oid)")
-        .get("/tokens/getToken?oid=${_id}")
+      http("Changement d'état d'un imei")
+        .put("/${psav}/imei/${imei}?etat=${etat}")
         .check(status.is(204)))
 
-  //NC70003A SAVE
-  val scnNC70003aMobileSAVE = scenario("[TOKEN] SAVE TOKEN")
-    .feed(feedPersonToken)
-    .exec(
-      http("[TOKEN-SAVE] getInfo(Token)")
-        .get("/tokens/saveToken?typePA=${accessPoint.type}&valuePA=${accessPoint.value}&applicationId=${applicationId}&personNumber=${personNumber}")
-        .check(status.is(204)))
+  val scnInsertImei = scenario("Insertion en stock")
+    .feed(feedPSAV)
+    .feed(feedBodyStock)
+    .exec( // voir comment on fait une boucle
+      http("Insertion en stock")
+        .post("/${psav}/imei")
+        .body("${bodystock}").asJSON()
+        .check(status.is(201)))
 
-  //SAIO
-  val scnSAIO = scenario("[SAIO] appel Saio")
-    .feed(feedInfoPA)
+  val scnTransfertActivite = scenario("Transfert activité")
+    .feed(feedPsavTransfert)
+    .feed(feedPsav)
     .exec(
-      http("[SAIO] appel Saio")
-        .get("/${pointAccesDares.0.cle.type}/@${pointAccesDares.0.cle.valeur}/saio")
+      http("Transfert activité")
+        .post("/${psavTransfert}/transfert/${psav}")
         .check(status.is(200)))
 
-  //CustomerOffer        
-  val scnCustomerOfferAvecMsisdn = scenario("[CUSTOMEROFFER] getCustomerOffer avec msisdn")
-    .feed(feedInfoMSISDN)
+  val scnReappro = scenario("Réapprovisionnement")
     .exec(
-      http("[CUSTOMEROFFER] CustomerOffer avec msisdn")
-        .get("/msisdn/@${pointAccesDares.0.cle.valeur}/offer")
+      http("Réapprovisionnement")
+        .post("/reappro")
         .check(status.is(200)))
-
-  val scnCustomerOfferAvecEid = scenario("[CUSTOMEROFFER] getCustomerOffer avec eid")
-    .feed(feedInfoEID)
-    .exec(
-      http("[CUSTOMEROFFER] CustomerOffer avec eid")
-        .get("/eid/@${pointAccesDares.0.cle.valeur}/offer")
-        .check(status.is(200)))
-
-  val scnCustomerOfferAvecSrvId = scenario("[CUSTOMEROFFER] getCustomerOffer avec srv_id")
-    .feed(feedInfoSRVID)
-    .exec(
-      http("[CUSTOMEROFFER] CustomerOffer avec srv_id")
-        .get("/srv_id/@${pointAccesDares.0.cle.valeur}/offer")
-        .check(status.is(200)))
-
-  //RadiusOffer        
-  val scnRadiusOfferPost = scenario("[RADIUSOFFER] postRadiusOffers")
-    .feed(feedInfoSRVID)
-    .feed(feedInfoCustomSRVID)
-    .feed(feedInfoCustomOffre)
-    .doIfOrElse(indexPostRadiusOffer.getAndIncrement() % proportionPostRadiusOffer == 0) {
-      exec(
-        http("[RADIUSOFFER] postRadiusOffers")
-          .post("/srv_id/@${pointAccesDares.0.cle.valeur}/offer/radiusoffers")
-          .body("${bodyRadiusOffer}").asJSON
-          .check(status.is(200)))
-    } {
-      exec(
-        http("[RADIUSOFFER] postRadiusOffers")
-          .post("/srv_id/@${customsrvid}/offer/radiusoffers")
-          .body("${bodyRadiusOffer}").asJSON
-          .check(status.is(200)))
-    }
-
-  val scnRadiusOfferPut = scenario("[RADIUSOFFER] putRadiusOffers")
-    .feed(feedInfoSRVID)
-    .feed(feedInfoCustomOffre)
-    .exec(
-      http("[RADIUSOFFER] putRadiusOffers")
-        .put("/srv_id/@${pointAccesDares.0.cle.valeur}/offer/radiusoffers")
-        .body("${bodyRadiusOffer}").asJSON
-        .check(status.is(200)))
-
-  val format = new java.text.SimpleDateFormat("dd-MM-yyyy")
-  format.format(new java.util.Date())
-  val toto = format.parse("21-03-2011");
-
-  //NOTIFIER MOUVEMENT CT 
-  val scnNotifierMouvementCT = scenario("[NOTIFIER MOUVEMENT CT] notifier Mouvement CT")
-    .feed(feedPfsPourNotifier)
-    .feed(feedNumVoip)
-    .exec(
-      http("[NOTIFIER MOUVEMENT CT] post mouvement")
-        .post("")
-        .fileBody("notifierMouvement", Map("date" -> new java.text.SimpleDateFormat("yyyyMMddHHmmss").format(new java.util.Date()), "numpfs" -> "${_id}", "numprsuser" -> "${infosPersonUser.noPerson}", "numprspayeur" -> "${infosPersonPayer.noPerson}", "numprsowner" -> "${infosPersonOwner.noPerson}", "numVoip" -> "${numvoip}"))
-        .check(status.is(200)))
-
-  //HEALTHCHECK   
-  val scnHealthcheck = scenario("HEALTHCHECK")
-    .exec(
-      http("HEALTHCHECK")
-        .get("?wait=true")
-        .check(status.is(200)))
-  //fin scenario   
+ //fin scenario   
 
   /******************************************************************/
   /******************************************************************/
@@ -259,67 +124,35 @@ class Perf extends Simulation {
   /******************************************************************/
 
   //lancement des tests
+  val nbBulkCheckParSeconde = ??
+  val nbCheckImeiParSeconde = ??
+  val nbUpdateImeiParSeconde = ??
+  val nbInsertImeiParSeconde = ??
+  val nbTransfertParSeconde = ??
+  val nbReapproParSeconde = ??
+  
+  setUp(scnBulkCheckImei.users(dureeTest * nbBulkCheckParSeconde).ramp(dureeTest).protocolConfig(baseUrl))
+  setUp(scnCheckImei.users(dureeTest * nbCheckImeiParSeconde).ramp(dureeTest).protocolConfig(baseUrl))
+  setUp(scnUpdateImei.users(dureeTest * nbUpdateImeiParSeconde).ramp(dureeTest).protocolConfig(baseUrl))
+  setUp(scnInsertImei.users(dureeTest * nbInsertImeiParSeconde).ramp(dureeTest).protocolConfig(baseUrl))
+  setUp(scnTransfertActivite.users(dureeTest * nbTransfertParSeconde).ramp(dureeTest).protocolConfig(baseUrl))
+  setUp(scnReappro.users(dureeTest * nbReapproParSeconde).ramp(dureeTest).protocolConfig(baseUrl))
 
-  if (testPSWG) {
-    val nbUsers = dureeTest * nbUserParSecondeNC7000PSWG
-    setUp(scnNC7000MobileAvecMsisdn.users(nbUsers).ramp(dureeTest).protocolConfig(httpConfServicenc7000))
-    setUp(scnNC7000MobileAvecEid.users(nbUsers).ramp(dureeTest).protocolConfig(httpConfServicenc7000))
-    setUp(scnNC7000FixeAvecSrvId.users(nbUsers).ramp(dureeTest).protocolConfig(httpConfServicenc7000))
-  }
-
-  if (test3A_get) {
-    val nbUsers = dureeTest * nbUserParSecondeNC70003A_get
-    setUp(scnNC70003aMobileGET.users(nbUsers).ramp(dureeTest).protocolConfig(httpConfApi))
-  }
-
-  if (test3A_save) {
-    val nbUsers = dureeTest * nbUserParSecondeNC70003A_save
-    setUp(scnNC70003aMobileSAVE.users(nbUsers).ramp(dureeTest).protocolConfig(httpConfApi))
-  }
-
-  if (testSAIO) {
-    val nbUsers = dureeTest * nbUserParSecondeSAIO
-    setUp(scnSAIO.users(nbUsers).ramp(dureeTest).protocolConfig(httpConfServiceSAIO))
-  }
-
-  if (testCustomerOffer) {
-    val nbUsers = dureeTest * nbUserParSecondeCustomerOffer
-    setUp(scnCustomerOfferAvecMsisdn.users(nbUsers).ramp(dureeTest).protocolConfig(httpConfServiceCustomerOffer))
-    setUp(scnCustomerOfferAvecEid.users(nbUsers).ramp(dureeTest).protocolConfig(httpConfServiceCustomerOffer))
-    setUp(scnCustomerOfferAvecSrvId.users(nbUsers).ramp(dureeTest).protocolConfig(httpConfServiceCustomerOffer))
-  }
-
-  if (testPostRadiusOffer) {
-    val nbUsers = dureeTest * nbUserParSecondeRadiusOffer
-    setUp(scnRadiusOfferPost.users(nbUsers).ramp(dureeTest).protocolConfig(httpConfServiceRadiusOffer))
-  }
-
-  if (testPutRadiusOffer) {
-    val nbUsers = dureeTest * nbUserParSecondeRadiusOffer
-    setUp(scnRadiusOfferPut.users(nbUsers).ramp(dureeTest).protocolConfig(httpConfServiceRadiusOffer))
-  }
-
-  if (testHealthcheck) {
-    val nbUsers = dureeTest * nbUserParSecondeHealthcheck
-    setUp(scnHealthcheck.users(nbUsers).ramp(dureeTest).protocolConfig(httpConfServiceHealthcheck))
-  }
-
-  if (testNotifierMouvementCT) {
-    val nbUsers = dureeTest * nbUserParSecondeNotifierMouvementCT
-    setUp(scnNotifierMouvementCT.users(nbUsers).ramp(dureeTest).protocolConfig(httpConfServiceNotiferMouvementCT))
-  }
-
-  val hello = new Thread(new Runnable {
-    def run() {
-      Thread.sleep(dureeAvantLancementProvisonning)
-      kshLancementProvisionning.run()
-    }
-  })
-
-  if (lancementProvisonning) {
-    hello.start
-  }
-  //
+// Revoir les deux derniers cas
+  //setUp(
+  //scn.inject(
+  //  nothingFor(4 seconds), // 1
+  //  atOnceUsers(10), // 2
+  //  rampUsers(10) over(5 seconds), // 3
+  //  constantUsersPerSec(20) during(15 seconds), // 4
+  //  constantUsersPerSec(20) during(15 seconds) randomized, // 5
+  //  rampUsersPerSec(10) to(20) during(10 minutes), // 6
+  //  rampUsersPerSec(10) to(20) during(10 minutes) randomized, // 7
+  //  splitUsers(1000) into(rampUsers(10) over(10 seconds)) separatedBy(10 seconds), // 8
+  //  splitUsers(1000) into(rampUsers(10) over(10 seconds)) separatedBy(atOnceUsers(30)), // 9
+  //  heavisideUsers(1000) over(20 seconds) // 10
+  //  ).protocols(httpConf)
+  //)
 
 }
 
