@@ -9,7 +9,7 @@ import copy
 
 LOCK = threading.Lock() 
 
-DEBUG = True
+DEBUG = False
 
 def debug(*affichage):
     if DEBUG:
@@ -243,4 +243,4 @@ api.add_resource(Transfert,BASE_URL_PSAV + '/transfert/<psavcible>')
 api.add_resource(Reappro,BASE_URL + '/reappro')
 
 if __name__ == '__main__':
-    app.run(debug=True, threaded=True)
+    app.run(debug=False, threaded=True)

@@ -1,21 +1,16 @@
 package basic
 
-import com.excilys.ebi.gatling.core.Predef._
-import com.excilys.ebi.gatling.http.Predef._
-import com.excilys.ebi.gatling.jdbc.Predef._
-import com.excilys.ebi.gatling.http.Headers.Names._
-import akka.util.duration._
-import bootstrap._
+import io.gatling.core.Predef._
+import io.gatling.http.Predef._
+import scala.concurrent.duration._
 import scala.collection.mutable.ArrayBuffer
-import com.excilys.ebi.gatling.core.structure.ScenarioBuilder
 import scala.sys.process._
 import java.util.Calendar
 
-class Perf extends Simulation {
+class MyStockPerf extends Simulation {
 
  
-  //la duree du test en seconde
-  val dureeTest = 60
+ 
 
   /******************************************************************/
   /******************************************************************/
@@ -24,8 +19,8 @@ class Perf extends Simulation {
   /******************************************************************/
   /******************************************************************/
 
-  val baseUrl = httpConfig
-    .baseURL("localhost:5000/stock/")
+  val baseUrl = http
+    .baseURL("http://localhost:5000/stock")
 
  
   /******************************************************************/
@@ -35,7 +30,6 @@ class Perf extends Simulation {
   /******************************************************************/
   /******************************************************************/
 
-  // TODO produire les fichiers de feeds
   val feedImeiPsav = csv("imeiPsav.csv").random // imei,gencod,psav
   val feedImeiPsavPersistent = csv("imeiPsavPersistent.csv").random // imei,gencod,psav, que les psav qui ne servent pas au transfert de stock
   val feedPsav = csv("psav.csv").random 
@@ -57,8 +51,20 @@ class Perf extends Simulation {
     }
   }
 
-  val feedBodyStock = new Feeder[String] {
-    //TODO
+   val feedBodyStock = new Feeder[String] {
+
+    private val RNG = new scala.util.Random
+
+    private def randInt(a: Int, b: Int) = RNG.nextInt(b - a) + a
+
+    override def hasNext = true
+
+    override def next: Map[String, String] = {
+      val fakeIMEI: Int = randInt(1, 100000000)
+      var body: String = """{"etat" : "D", "gencod": "3526356039329",  "imei" : """ + "\"" + fakeIMEI + "\"" + "}"
+
+      Map("bodystock" -> body.toString())
+    }
   }
  
   //fin feeds
@@ -72,10 +78,10 @@ class Perf extends Simulation {
   //les scenarios
 
   val scnBulkCheckImei = scenario("Interrogation en masse")
-    .feed(feedPSAV)
+    .feed(feedPsav)
     .exec(
       http("Interrogation en masse")
-        .get("/${psav}/")
+        .get("/${psav}")
         .check(status.is(200)))
 
   val scnCheckImei = scenario("Check d'un imei")
@@ -85,21 +91,25 @@ class Perf extends Simulation {
         .get("/${psav}/imei/${imei}")
         .check(status.in(200,404)))
 
-  val scnUpdateImei = scenario("Changement d'état d'un imei")
+  val scnCheckAndUpdateUpdateImei = scenario("Check et update imei")
     .feed(feedImeiPsavPersistent)
     .feed(feedEtat)
+    .exec(
+      http("Check d'un imei")
+        .get("/${psav}/imei/${imei}")
+        .check(status.in(200)))
     .exec(
       http("Changement d'état d'un imei")
         .put("/${psav}/imei/${imei}?etat=${etat}")
         .check(status.is(204)))
 
   val scnInsertImei = scenario("Insertion en stock")
-    .feed(feedPSAV)
+    .feed(feedPsav)
     .feed(feedBodyStock)
     .exec( // voir comment on fait une boucle
       http("Insertion en stock")
         .post("/${psav}/imei")
-        .body("${bodystock}").asJSON()
+        .body(StringBody("${bodystock}")).asJSON
         .check(status.is(201)))
 
   val scnTransfertActivite = scenario("Transfert activité")
@@ -107,7 +117,7 @@ class Perf extends Simulation {
     .feed(feedPsav)
     .exec(
       http("Transfert activité")
-        .post("/${psavTransfert}/transfert/${psav}")
+        .post("/${psavTransfert}/transfert/${psav}?type=total")
         .check(status.is(200)))
 
   val scnReappro = scenario("Réapprovisionnement")
@@ -124,19 +134,25 @@ class Perf extends Simulation {
   /******************************************************************/
 
   //lancement des tests
-  val nbBulkCheckParSeconde = ??
-  val nbCheckImeiParSeconde = ??
-  val nbUpdateImeiParSeconde = ??
-  val nbInsertImeiParSeconde = ??
-  val nbTransfertParSeconde = ??
-  val nbReapproParSeconde = ??
-  
-  setUp(scnBulkCheckImei.users(dureeTest * nbBulkCheckParSeconde).ramp(dureeTest).protocolConfig(baseUrl))
-  setUp(scnCheckImei.users(dureeTest * nbCheckImeiParSeconde).ramp(dureeTest).protocolConfig(baseUrl))
-  setUp(scnUpdateImei.users(dureeTest * nbUpdateImeiParSeconde).ramp(dureeTest).protocolConfig(baseUrl))
-  setUp(scnInsertImei.users(dureeTest * nbInsertImeiParSeconde).ramp(dureeTest).protocolConfig(baseUrl))
-  setUp(scnTransfertActivite.users(dureeTest * nbTransfertParSeconde).ramp(dureeTest).protocolConfig(baseUrl))
-  setUp(scnReappro.users(dureeTest * nbReapproParSeconde).ramp(dureeTest).protocolConfig(baseUrl))
+ 
+  //la duree du test en seconde
+  val dureeTest = 60
+
+  val nbBulkCheckParSeconde = 1
+  val nbCheckImeiParSeconde = 3
+  val nbUpdateImeiParSeconde = 1
+  val nbInsertImeiParSeconde = 1
+  val nbTransfertParSeconde = 0.5
+  val nbReapproParSeconde = 0.2
+ 
+  setUp(scnBulkCheckImei.inject(rampUsers(dureeTest * nbBulkCheckParSeconde) over (dureeTest seconds))).protocols(baseUrl)
+  setUp(scnCheckImei.inject(rampUsers(dureeTest * nbCheckImeiParSeconde) over (dureeTest seconds))).protocols(baseUrl)
+  setUp(scnCheckAndUpdateUpdateImei.inject(rampUsers(dureeTest * nbUpdateImeiParSeconde) over (dureeTest seconds))).protocols(baseUrl)
+  setUp(scnInsertImei.inject(rampUsers(dureeTest * nbInsertImeiParSeconde) over (dureeTest seconds))).protocols(baseUrl)
+  setUp(scnTransfertActivite.inject(rampUsers(1) over (3 seconds))).protocols(baseUrl)
+  setUp(scnReappro.inject(rampUsers(1) over (60 seconds))).protocols(baseUrl)
+ 
+ 
 
 // Revoir les deux derniers cas
   //setUp(
