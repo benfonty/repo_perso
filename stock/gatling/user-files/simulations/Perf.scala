@@ -133,42 +133,41 @@ class MyStockPerf extends Simulation {
   /******************************************************************/
   /******************************************************************/
 
-  //lancement des tests
- 
-  //la duree du test en seconde
-  val dureeTest = 60
-
-  val nbBulkCheckParSeconde = 1
-  val nbCheckImeiParSeconde = 3
-  val nbUpdateImeiParSeconde = 1
-  val nbInsertImeiParSeconde = 1
-  val nbTransfertParSeconde = 0.5
-  val nbReapproParSeconde = 0.2
- 
-  setUp(scnBulkCheckImei.inject(rampUsers(dureeTest * nbBulkCheckParSeconde) over (dureeTest seconds))).protocols(baseUrl)
-  setUp(scnCheckImei.inject(rampUsers(dureeTest * nbCheckImeiParSeconde) over (dureeTest seconds))).protocols(baseUrl)
-  setUp(scnCheckAndUpdateUpdateImei.inject(rampUsers(dureeTest * nbUpdateImeiParSeconde) over (dureeTest seconds))).protocols(baseUrl)
-  setUp(scnInsertImei.inject(rampUsers(dureeTest * nbInsertImeiParSeconde) over (dureeTest seconds))).protocols(baseUrl)
-  setUp(scnTransfertActivite.inject(rampUsers(1) over (3 seconds))).protocols(baseUrl)
-  setUp(scnReappro.inject(rampUsers(1) over (60 seconds))).protocols(baseUrl)
+  //lancement des tests 
  
  
-
-// Revoir les deux derniers cas
-  //setUp(
-  //scn.inject(
-  //  nothingFor(4 seconds), // 1
-  //  atOnceUsers(10), // 2
-  //  rampUsers(10) over(5 seconds), // 3
-  //  constantUsersPerSec(20) during(15 seconds), // 4
-  //  constantUsersPerSec(20) during(15 seconds) randomized, // 5
-  //  rampUsersPerSec(10) to(20) during(10 minutes), // 6
-  //  rampUsersPerSec(10) to(20) during(10 minutes) randomized, // 7
-  //  splitUsers(1000) into(rampUsers(10) over(10 seconds)) separatedBy(10 seconds), // 8
-  //  splitUsers(1000) into(rampUsers(10) over(10 seconds)) separatedBy(atOnceUsers(30)), // 9
-  //  heavisideUsers(1000) over(20 seconds) // 10
-  //  ).protocols(httpConf)
-  //)
+ setUp(
+  // check and update = 8000 par jour = 2,5 par seconde pour faire un jour en une heure
+  // 2000 pendant 20 minutes, 3000 pendant 10 minutes, le tout deux fois, pour reproduire les pics du midi et du soir.
+  scnCheckAndUpdateUpdateImei.inject(
+    constantUsersPerSec(2) during(20 minutes) randomized,
+    constantUsersPerSec(5) during(10 minutes) randomized,
+    constantUsersPerSec(2) during(20 minutes) randomized,
+    constantUsersPerSec(5) during(10 minutes) randomized
+    ).protocols(baseUrl),
+  // bulk check 1 toutes les trentes secondes
+   scnBulkCheckImei.inject(
+    splitUsers(120) into(atOnceUsers(1)) separatedBy(30 seconds)
+    ).protocols(baseUrl),
+   // insert imei (200 toutes les 5 minutes)
+   scnInsertImei.inject(
+    splitUsers(2400) into(rampUsers(200) over(4 seconds)) separatedBy(5 minutes)
+    ).protocols(baseUrl),
+   // transfert 1 par tranche de 20 minutes
+    scnTransfertActivite.inject(
+    nothingFor(10 minutes),
+    atOnceUsers(1),
+    nothingFor(20 minutes),
+    atOnceUsers(1),
+    nothingFor(20 minutes),
+    atOnceUsers(1)
+    ).protocols(baseUrl),
+  // reappro : 1 pendant les moments calmes 
+   scnReappro.inject(
+    nothingFor(40 minutes),
+    atOnceUsers(1)
+    ).protocols(baseUrl)
+  )
 
 }
 

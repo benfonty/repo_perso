@@ -1,0 +1,9 @@
+/stock/gatling/lib
+/stock/gatling/bin
+/stock/gatling/LICENSE
+/stock/gatling/user-files/data/search.csv
+/stock/gatling/user-files/data/*.csv
+/stock/gatling/user-files/simulations/computerdatabase/BasicSimulation.scala
+/stock/gatling/user-files/simulations/computerdatabase/advanced
+/stock/gatling/results
+/stock/gatling/target
