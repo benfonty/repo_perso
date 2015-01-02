@@ -42,9 +42,9 @@ class MyStockPerf extends Simulation {
     override def hasNext = true
 
     override def next: Map[String, String] = {
-      val rand: Int = RNG.nextInt(1)
+      val rand: Int = RNG.nextInt(10)
       var etat = "D"
-      if (rand == 1) {
+      if (rand >= 5) {
         etat = "K"
       }
       Map("etat" -> etat)
@@ -98,6 +98,15 @@ class MyStockPerf extends Simulation {
       http("Check d'un imei")
         .get("/${psav}/imei/${imei}")
         .check(status.in(200)))
+    .pause(3 seconds)
+    .exec(
+      http("Changement d'état d'un imei")
+        .put("/${psav}/imei/${imei}?etat=${etat}")
+        .check(status.is(204)))
+
+  val scnUpdateUpdateImei = scenario("update imei")
+    .feed(feedImeiPsavPersistent)
+    .feed(feedEtat)
     .exec(
       http("Changement d'état d'un imei")
         .put("/${psav}/imei/${imei}?etat=${etat}")
@@ -134,7 +143,6 @@ class MyStockPerf extends Simulation {
   /******************************************************************/
 
   //lancement des tests 
- 
  
  setUp(
   // check and update = 8000 par jour = 2,5 par seconde pour faire un jour en une heure
