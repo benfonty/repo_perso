@@ -6,6 +6,9 @@ import datetime
 import threading
 import random
 import copy
+from tornado.wsgi import WSGIContainer
+from tornado.httpserver import HTTPServer
+from tornado.ioloop import IOLoop
 
 LOCK = threading.Lock() 
 
@@ -243,4 +246,6 @@ api.add_resource(Transfert,BASE_URL_PSAV + '/transfert/<psavcible>')
 api.add_resource(Reappro,BASE_URL + '/reappro')
 
 if __name__ == '__main__':
-    app.run(debug=True, threaded=True)
+    http_server = HTTPServer(WSGIContainer(app))
+    http_server.listen(5000)
+    IOLoop.instance().start()

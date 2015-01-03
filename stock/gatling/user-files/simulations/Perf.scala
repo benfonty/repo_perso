@@ -148,18 +148,18 @@ class MyStockPerf extends Simulation {
   // check and update = 8000 par jour = 2,5 par seconde pour faire un jour en une heure
   // 2000 pendant 20 minutes, 3000 pendant 10 minutes, le tout deux fois, pour reproduire les pics du midi et du soir.
   scnCheckAndUpdateUpdateImei.inject(
-    constantUsersPerSec(2) during(20 minutes) randomized,
-    constantUsersPerSec(5) during(10 minutes) randomized,
-    constantUsersPerSec(2) during(20 minutes) randomized,
-    constantUsersPerSec(5) during(10 minutes) randomized
+    constantUsersPerSec(4) during(20 minutes) randomized,
+    constantUsersPerSec(10) during(10 minutes) randomized,
+    constantUsersPerSec(4) during(20 minutes) randomized,
+    constantUsersPerSec(10) during(10 minutes) randomized
     ).protocols(baseUrl),
   // bulk check 1 toutes les trentes secondes
    scnBulkCheckImei.inject(
-    splitUsers(120) into(atOnceUsers(1)) separatedBy(30 seconds)
+    splitUsers(240) into(atOnceUsers(1)) separatedBy(15 seconds)
     ).protocols(baseUrl),
    // insert imei (200 toutes les 5 minutes)
    scnInsertImei.inject(
-    splitUsers(2400) into(rampUsers(200) over(4 seconds)) separatedBy(5 minutes)
+    splitUsers(4800) into(rampUsers(400) over(4 seconds)) separatedBy(5 minutes)
     ).protocols(baseUrl),
    // transfert 1 par tranche de 20 minutes
     scnTransfertActivite.inject(
