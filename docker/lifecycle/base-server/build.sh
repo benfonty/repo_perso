@@ -1,0 +1,1 @@
+docker build  -t bfonty/base-server:latest .

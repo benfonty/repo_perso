@@ -1,0 +1,1 @@
+docker rm $(docker ps -qa -f label=type=appli)

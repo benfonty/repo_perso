@@ -1,0 +1,1 @@
+ docker run -v /Users/bfonty/Documents/REPO_GIT/bfonty/docker/crosscompilation:/sources bfonty/crossc

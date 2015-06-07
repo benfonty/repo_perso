@@ -1,0 +1,7 @@
+FROM scratch
+
+MAINTAINER Benoît FONTY
+
+ADD DATA /DATA
+
+VOLUME /DATA

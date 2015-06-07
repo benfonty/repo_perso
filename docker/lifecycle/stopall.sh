@@ -1,0 +1,1 @@
+docker stop $(docker ps -q -f label=type=appli)

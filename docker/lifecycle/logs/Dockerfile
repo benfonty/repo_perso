@@ -1,0 +1,5 @@
+FROM scratch
+
+MAINTAINER Benoît FONTY
+
+VOLUME /LOGS
