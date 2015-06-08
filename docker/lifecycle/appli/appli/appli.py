@@ -1,7 +1,7 @@
 # coding: utf8
 
 from flask import Flask
-import os
+import socket
 import json
 
 try:
@@ -21,15 +21,16 @@ reponse = """
         </body>
     </html>"""
 
-
+def gethostname():
+    if socket.gethostname().find('.')>=0:
+        return socket.gethostname()
+    else:
+        return socket.gethostbyaddr(socket.gethostname())[0]
 
 def log(something):
-    try:
-        with open("/LOGS/" + "logs_" + os.environ.get('HOSTNAME') + ".log") as logfile:
-            logfile.write(something + "\n")
-    except Exception as e:
-        print("Erreur ecriture de log ",e)
-
+    with open("/LOGS/" + "logs_" + gethostname() + ".log","a+") as logfile:
+        logfile.write(something + "\n")
+    
 app = Flask(__name__)
 
 @app.route("/")
