@@ -1,4 +1,4 @@
-FROM busybox
+FROM ubuntu
 
 MAINTAINER Benoît FONTY
 
