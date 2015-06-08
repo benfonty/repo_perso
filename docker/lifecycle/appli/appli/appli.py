@@ -34,8 +34,8 @@ app = Flask(__name__)
 
 @app.route("/")
 def hello():
-    log("J'ai été appelé")
-    return reponse.replace("TEXTE",param.texte), 200
+    log("j'ai reçu un message")
+    return reponse.replace("TEXTE",param["texte"]), 200
 
 if __name__ == "__main__":
     print "Demarrage"
